@@ -14,8 +14,6 @@ The application demonstrates core operating-system mechanisms through real algor
 4. [Build & Compilation Guide](#4-build--compilation-guide)
 5. [CLI Command Reference](#5-cli-command-reference)
 6. [Test Suite & Verification](#6-test-suite--verification)
-7. [Screenshots & Submission Evidence](#7-screenshots--submission-evidence)
-8. [Submission Packaging](#8-submission-packaging)
 
 ---
 
@@ -84,15 +82,12 @@ CampusCompute/
 │   ├── build_submission.sh         # Clean submission ZIP packaging script
 │   └── verify_submission.sh        # Pre-flight verification checklist
 │
-├── screenshots/                    # Screenshot management
-│   ├── README.md                   # Evidence capture guidelines
-│   ├── manifest.csv                # 24-entry screenshot checklist and status
-│   └── captures/                   # Directory where genuine terminal captures are saved
-│       └── .gitkeep
+|
+│
 │
 ├── logs/                           # Runtime log destination
 │   └── .gitkeep
-└── submission/                     # Generated PDF and ZIP destination
+                # Generated PDF and ZIP destination
 ```
 
 ---
