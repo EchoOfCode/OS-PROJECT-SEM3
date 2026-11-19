@@ -16,5 +16,6 @@
 #include "resource_limits.h"
 #include "cleanup.h"
 #include "cli.h"
+#include "dashboard.h"
 
 #endif /* CAMPUSCOMPUTE_H */

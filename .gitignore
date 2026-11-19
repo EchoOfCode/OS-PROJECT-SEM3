@@ -4,6 +4,8 @@ logs/*.log
 submission/
 screenshots/
 scripts/
+*.pdf
+*.zip
 __pycache__/
 *.pyc
 .DS_Store

@@ -2,6 +2,7 @@
  * cli.c - Command-line interface implementation for CampusCompute
  */
 #include "campuscompute.h"
+#include <unistd.h>
 
 const char *cli_parse_option(int argc, char *argv[], const char *name)
 {
@@ -44,6 +45,30 @@ const char *cli_parse_option(int argc, char *argv[], const char *name)
     return NULL;
 }
 
+bool cli_has_flag(int argc, char *argv[], const char *name)
+{
+    if (!argv || !name || argc < 1) {
+        return false;
+    }
+
+    char flag_name[128];
+    if (name[0] == '-') {
+        snprintf(flag_name, sizeof(flag_name), "%s", name);
+    } else {
+        snprintf(flag_name, sizeof(flag_name), "--%s", name);
+    }
+
+    for (int i = 1; i < argc; i++) {
+        if (!argv[i]) {
+            continue;
+        }
+        if (strcmp(argv[i], flag_name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 bool cli_parse_int_option(int argc, char *argv[], const char *name, int *out)
 {
     if (!out) {
@@ -75,6 +100,9 @@ void cli_print_help(void)
     printf("Commands:\n");
     printf("  help (or --help)\n");
     printf("      Show this help message and exit.\n\n");
+    printf("  dashboard (or tui) [--auto]\n");
+    printf("      Launch the Terminal User Interface (TUI) Dashboard with telemetry,\n");
+    printf("      interactive workstation demo selectors, and system health status.\n\n");
     printf("  jobs list --input <file>\n");
     printf("      Parse, validate, and display jobs from a CSV file.\n\n");
     printf("  schedule fcfs --input <file>\n");
@@ -235,6 +263,9 @@ int demo_integrated(const char *input_file, int quantum)
 int cli_run(int argc, char *argv[])
 {
     if (argc < 2) {
+        if (isatty(fileno(stdin)) && isatty(fileno(stdout))) {
+            return dashboard_run(false);
+        }
         CC_ERROR("No command specified.");
         cli_print_help();
         return 1;
@@ -246,6 +277,13 @@ int cli_run(int argc, char *argv[])
     if (strcmp(cmd, "help") == 0 || strcmp(cmd, "--help") == 0 || strcmp(cmd, "-h") == 0) {
         cli_print_help();
         return 0;
+    }
+
+    /* Dashboard / TUI command */
+    if (strcmp(cmd, "dashboard") == 0 || strcmp(cmd, "tui") == 0 ||
+        strcmp(cmd, "--dashboard") == 0 || strcmp(cmd, "--tui") == 0) {
+        bool auto_demo = cli_has_flag(argc, argv, "auto");
+        return dashboard_run(auto_demo);
     }
 
     /* jobs list --input <file> */
@@ -509,10 +547,21 @@ int cli_run(int argc, char *argv[])
         return cleanup_demo();
     }
 
-    /* demo integrated --input <file> --quantum <n> */
+    /* demo integrated / demo dashboard */
     if (strcmp(cmd, "demo") == 0) {
-        if (argc < 3 || strcmp(argv[2], "integrated") != 0) {
-            CC_ERROR("Unknown or missing subcommand for 'demo'. Expected: 'demo integrated'");
+        if (argc < 3) {
+            CC_ERROR("Missing subcommand for 'demo'. Expected: 'demo integrated' or 'demo dashboard'");
+            cli_print_help();
+            return 1;
+        }
+
+        if (strcmp(argv[2], "dashboard") == 0) {
+            bool auto_demo = cli_has_flag(argc, argv, "auto");
+            return dashboard_run(auto_demo);
+        }
+
+        if (strcmp(argv[2], "integrated") != 0) {
+            CC_ERROR("Unknown subcommand for 'demo': '%s'. Expected: 'integrated' or 'dashboard'", argv[2]);
             cli_print_help();
             return 1;
         }

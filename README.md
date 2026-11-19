@@ -201,6 +201,14 @@ make help
 ## 5. CLI Command Reference
 
 ```bash
+# Launch Interactive Terminal Dashboard (TUI)
+./build/campuscompute dashboard
+# Or simply run without arguments in an interactive terminal:
+./build/campuscompute
+
+# Run Automated Live Stream Dashboard Demo
+./build/campuscompute dashboard --auto
+
 # Display help and command usage
 ./build/campuscompute help
 
