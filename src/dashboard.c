@@ -3,14 +3,16 @@
  *
  * Implements an advanced, high-contrast terminal workstation with live Linux
  * telemetry (RSS memory, active FDs, kernel release), ANSI box-drawing cards,
- * interactive scheduler quantum tuning, visual circular queue topology,
- * Banker's step-by-step matrix derivation, and performance comparative bar charts.
+ * interactive arrow-key menu navigation (Up/Down/Enter), scheduler quantum tuning,
+ * visual circular queue topology, Banker's step-by-step matrix derivation, and
+ * performance comparative bar charts.
  */
 #include "campuscompute.h"
 #include <unistd.h>
 #include <sys/utsname.h>
 #include <time.h>
 #include <dirent.h>
+#include <termios.h>
 
 /* ANSI Terminal Styling Palette */
 #define CLR_RST     "\033[0m"
@@ -32,10 +34,104 @@
 #define CLR_B_CYN   "\033[1;36m"
 #define CLR_B_WHT   "\033[1;37m"
 
-#define BG_BLU      "\033[44m"
-#define BG_MAG      "\033[45m"
-#define BG_CYN      "\033[46m"
-#define BG_DARK     "\033[40m"
+/* Inverted / Highlighted selection style */
+#define SEL_BG      "\033[1;30;46m"  /* Black text on bright cyan background */
+
+typedef struct {
+    char key_char;
+    const char *icon;
+    const char *title;
+    const char *subtitle;
+} MenuItem;
+
+static const MenuItem MENU_ITEMS[] = {
+    { '1', "📊", "CPU Scheduling Simulator", "FCFS, Round Robin, Priority & Visual Timelines" },
+    { '2', "🔄", "Concurrent Activity Logger", "Bounded Queue Topology & Thread Tracing" },
+    { '3', "🛡️ ", "Banker's Deadlock Safety", "Step-by-Step Derivation & Matrices Heatmap" },
+    { '4', "⚡", "Inter-Process Communication", "Shared Memory Packet Flow & Semaphores" },
+    { '5', "⚙️ ", "Worker Process Management", "fork / waitpid & Controlled Fault Injection" },
+    { '6', "🛑", "Linux Resource Limits", "setrlimit / RLIMIT_NOFILE File Descriptor Limit" },
+    { '7', "🧹", "Resource Cleanup & Audit", "Systematic Zero-Leak Verification" },
+    { '8', "🚀", "Full Integrated Demonstration", "Live Streaming All-Module Showcase" },
+    { '9', "📋", "View Current Workload Jobs", "Inspect data/jobs.csv Batch Specifications" },
+    { 'T', "🎛️ ", "Interactive Quantum Tuning Lab", "Tune Round Robin Quantum in Real-Time" },
+    { '0', "🚪", "Exit Control Dashboard", "Return to shell terminal" }
+};
+
+#define MENU_ITEM_COUNT ((int)(sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0])))
+
+typedef enum {
+    KEY_NONE,
+    KEY_UP,
+    KEY_DOWN,
+    KEY_ENTER,
+    KEY_CHAR,
+    KEY_EXIT
+} InputKey;
+
+static struct termios orig_termios;
+static bool raw_mode_active = false;
+
+static void disable_raw_mode(void)
+{
+    if (raw_mode_active) {
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+        raw_mode_active = false;
+    }
+}
+
+static void enable_raw_mode(void)
+{
+    if (!isatty(STDIN_FILENO)) {
+        return;
+    }
+    if (tcgetattr(STDIN_FILENO, &orig_termios) == 0) {
+        struct termios raw = orig_termios;
+        raw.c_lflag &= (unsigned int)~(ECHO | ICANON);
+        tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+        raw_mode_active = true;
+    }
+}
+
+static InputKey read_terminal_key(char *out_char)
+{
+    char c = 0;
+    ssize_t n = read(STDIN_FILENO, &c, 1);
+    if (n <= 0) {
+        return KEY_NONE;
+    }
+
+    /* Escape sequence for arrow keys */
+    if (c == '\033') {
+        char seq[3];
+        if (read(STDIN_FILENO, &seq[0], 1) <= 0) return KEY_EXIT;
+        if (read(STDIN_FILENO, &seq[1], 1) <= 0) return KEY_EXIT;
+
+        if (seq[0] == '[') {
+            switch (seq[1]) {
+                case 'A': return KEY_UP;    /* Up Arrow */
+                case 'B': return KEY_DOWN;  /* Down Arrow */
+                case 'C': return KEY_ENTER; /* Right Arrow -> select */
+                case 'D': return KEY_NONE;  /* Left Arrow */
+                default: break;
+            }
+        }
+        return KEY_NONE;
+    }
+
+    if (c == '\n' || c == '\r') {
+        return KEY_ENTER;
+    }
+
+    if (c == 'q' || c == 'Q') {
+        return KEY_EXIT;
+    }
+
+    if (out_char) {
+        *out_char = c;
+    }
+    return KEY_CHAR;
+}
 
 static void clear_terminal(void)
 {
@@ -150,23 +246,27 @@ static void show_telemetry_cards(void)
     printf("└───────────────────────────────────────────────────────────────────────────────────────────┘\n" CLR_RST);
 }
 
-static void show_menu(void)
+/* Render menu with interactive selected item highlighted */
+static void show_interactive_menu(int selected)
 {
     printf(CLR_B_MAG);
-    printf("┌─ INTERACTIVE LAB WORKSTATION — SELECT OPERATION ──────────────────────────────────────────┐\n");
-    printf("│  " CLR_B_CYN "[1]" CLR_B_WHT " 📊 CPU Scheduling Simulator" CLR_DIM " (FCFS, Round Robin, Priority & Visual Timelines)" CLR_MAG "  │\n");
-    printf("│  " CLR_B_CYN "[2]" CLR_B_WHT " 🔄 Concurrent Activity Logger" CLR_DIM " (Bounded Queue Topology & Thread Tracing)     " CLR_MAG "  │\n");
-    printf("│  " CLR_B_CYN "[3]" CLR_B_WHT " 🛡️  Banker's Deadlock Safety" CLR_DIM " (Step-by-Step Derivation & Matrices Heatmap)  " CLR_MAG "  │\n");
-    printf("│  " CLR_B_CYN "[4]" CLR_B_WHT " ⚡ Inter-Process Communication" CLR_DIM " (Shared Memory Packet Flow & Semaphores)     " CLR_MAG "  │\n");
-    printf("│  " CLR_B_CYN "[5]" CLR_B_WHT " ⚙️  Worker Process Management" CLR_DIM " (fork / waitpid & Controlled Fault Injection)" CLR_MAG "  │\n");
-    printf("│  " CLR_B_CYN "[6]" CLR_B_WHT " 🛑 Linux Resource Limits" CLR_DIM " (setrlimit / RLIMIT_NOFILE File Descriptor Limit)" CLR_MAG "  │\n");
-    printf("│  " CLR_B_CYN "[7]" CLR_B_WHT " 🧹 Resource Cleanup & Audit" CLR_DIM " (Systematic Zero-Leak Verification)           " CLR_MAG "  │\n");
-    printf("│  " CLR_B_CYN "[8]" CLR_B_WHT " 🚀 Full Integrated Demonstration" CLR_DIM " (Live Streaming All-Module Showcase)     " CLR_MAG "  │\n");
-    printf("│  " CLR_B_CYN "[9]" CLR_B_WHT " 📋 View Current Workload Jobs" CLR_DIM " (Inspect data/jobs.csv Batch Specifications)" CLR_MAG "  │\n");
-    printf("│  " CLR_B_YEL "[T]" CLR_B_WHT " 🎛️  Interactive Quantum Tuning Lab" CLR_DIM " (Tune Round Robin Quantum in Real-Time)   " CLR_MAG "  │\n");
-    printf("│  " CLR_B_RED "[0]" CLR_B_WHT " 🚪 Exit Control Dashboard                                                      " CLR_MAG "  │\n");
+    printf("┌─ INTERACTIVE LAB WORKSTATION — NAVIGATE WITH ARROW KEYS ──────────────────────────────────┐\n");
+
+    for (int i = 0; i < MENU_ITEM_COUNT; i++) {
+        const MenuItem *item = &MENU_ITEMS[i];
+        if (i == selected) {
+            /* Highlighted item with pointer arrow */
+            printf("│ " SEL_BG " ➜ [%c] %s %-32.32s %-42.42s" CLR_RST CLR_B_MAG " │\n",
+                   item->key_char, item->icon, item->title, item->subtitle);
+        } else {
+            /* Normal item */
+            printf("│    " CLR_B_CYN "[%c]" CLR_B_WHT " %s %-32.32s " CLR_DIM "%-42.42s" CLR_RST CLR_B_MAG " │\n",
+                   item->key_char, item->icon, item->title, item->subtitle);
+        }
+    }
+
     printf("└───────────────────────────────────────────────────────────────────────────────────────────┘\n" CLR_RST);
-    printf(CLR_B_WHT "  Enter Choice [0-9, T]: " CLR_B_CYN);
+    printf(CLR_B_YEL "  Controls: " CLR_B_WHT "[↑ / ↓]" CLR_WHT " Navigate  " CLR_B_WHT "[Enter]" CLR_WHT " Select  " CLR_B_WHT "[0-9, T]" CLR_WHT " Shortcut  " CLR_B_WHT "[q]" CLR_WHT " Exit\n" CLR_RST);
     fflush(stdout);
 }
 
@@ -454,82 +554,131 @@ int dashboard_run_integrated_tui(const char *input_file, int quantum, bool autom
     return res;
 }
 
+static void execute_menu_choice(char choice)
+{
+    switch (choice) {
+        case '1':
+            run_scheduler_view_with_quantum(2);
+            wait_for_enter(false);
+            break;
+        case '2':
+            run_logger_view();
+            wait_for_enter(false);
+            break;
+        case '3':
+            run_banker_view();
+            wait_for_enter(false);
+            break;
+        case '4':
+            run_ipc_view();
+            wait_for_enter(false);
+            break;
+        case '5':
+            run_worker_view();
+            wait_for_enter(false);
+            break;
+        case '6':
+            run_limits_view();
+            wait_for_enter(false);
+            break;
+        case '7':
+            run_cleanup_view();
+            wait_for_enter(false);
+            break;
+        case '8':
+            dashboard_run_integrated_tui("data/jobs.csv", 2, false);
+            break;
+        case '9':
+            run_jobs_view();
+            wait_for_enter(false);
+            break;
+        case 't':
+        case 'T':
+            run_quantum_tuning_lab();
+            wait_for_enter(false);
+            break;
+        default:
+            break;
+    }
+}
+
 int dashboard_run(bool auto_demo)
 {
     if (auto_demo) {
         return dashboard_run_integrated_tui("data/jobs.csv", 2, true);
     }
 
-    char line_buf[64];
+    /* Fallback for non-TTY (e.g. piped input or automated test environments) */
+    if (!isatty(STDIN_FILENO)) {
+        char line_buf[64];
+        if (fgets(line_buf, sizeof(line_buf), stdin) != NULL) {
+            char choice = line_buf[0];
+            if (choice == '0' || choice == 'q' || choice == 'Q') {
+                return 0;
+            }
+            execute_menu_choice(choice);
+        }
+        return 0;
+    }
+
+    int selected = 0;
+    enable_raw_mode();
+
     while (1) {
+        disable_raw_mode();
         clear_terminal();
         dashboard_show_header();
         show_telemetry_cards();
-        show_menu();
+        show_interactive_menu(selected);
+        enable_raw_mode();
 
-        if (fgets(line_buf, sizeof(line_buf), stdin) == NULL) {
-            /* Exit on EOF (e.g. Ctrl+D) */
-            printf("\n" CLR_DIM "Exiting CampusCompute Dashboard.\n" CLR_RST);
+        char direct_char = 0;
+        InputKey key = read_terminal_key(&direct_char);
+
+        if (key == KEY_EXIT) {
             break;
         }
 
-        /* Trim whitespace */
-        char *p = line_buf;
-        while (*p == ' ' || *p == '\t') p++;
-        char choice = *p;
-
-        if (choice == '0' || choice == 'q' || choice == 'Q') {
-            printf(CLR_B_WHT "\n  Thank you for using CampusCompute OS Lab Dashboard. Goodbye!\n\n" CLR_RST);
-            break;
-        }
-
-        switch (choice) {
-            case '1':
-                run_scheduler_view_with_quantum(2);
-                wait_for_enter(false);
+        if (key == KEY_UP) {
+            selected--;
+            if (selected < 0) {
+                selected = MENU_ITEM_COUNT - 1;
+            }
+        } else if (key == KEY_DOWN) {
+            selected++;
+            if (selected >= MENU_ITEM_COUNT) {
+                selected = 0;
+            }
+        } else if (key == KEY_ENTER) {
+            char choice = MENU_ITEMS[selected].key_char;
+            if (choice == '0') {
                 break;
-            case '2':
-                run_logger_view();
-                wait_for_enter(false);
+            }
+            disable_raw_mode();
+            execute_menu_choice(choice);
+            enable_raw_mode();
+        } else if (key == KEY_CHAR) {
+            if (direct_char == '0' || direct_char == 'q' || direct_char == 'Q') {
                 break;
-            case '3':
-                run_banker_view();
-                wait_for_enter(false);
-                break;
-            case '4':
-                run_ipc_view();
-                wait_for_enter(false);
-                break;
-            case '5':
-                run_worker_view();
-                wait_for_enter(false);
-                break;
-            case '6':
-                run_limits_view();
-                wait_for_enter(false);
-                break;
-            case '7':
-                run_cleanup_view();
-                wait_for_enter(false);
-                break;
-            case '8':
-                dashboard_run_integrated_tui("data/jobs.csv", 2, false);
-                break;
-            case '9':
-                run_jobs_view();
-                wait_for_enter(false);
-                break;
-            case 't':
-            case 'T':
-                run_quantum_tuning_lab();
-                wait_for_enter(false);
-                break;
-            default:
-                printf(CLR_B_RED "\n  Invalid selection '%c'. Please select an option from [0-9, T].\n" CLR_RST, choice);
-                sleep(1);
-                break;
+            }
+            /* Check if user pressed a direct shortcut key (1-9, T) */
+            for (int i = 0; i < MENU_ITEM_COUNT; i++) {
+                if (MENU_ITEMS[i].key_char == direct_char ||
+                    (MENU_ITEMS[i].key_char >= 'a' && MENU_ITEMS[i].key_char <= 'z' &&
+                     MENU_ITEMS[i].key_char - 32 == direct_char) ||
+                    (MENU_ITEMS[i].key_char >= 'A' && MENU_ITEMS[i].key_char <= 'Z' &&
+                     MENU_ITEMS[i].key_char + 32 == direct_char)) {
+                    selected = i;
+                    disable_raw_mode();
+                    execute_menu_choice(MENU_ITEMS[i].key_char);
+                    enable_raw_mode();
+                    break;
+                }
+            }
         }
     }
 
+    disable_raw_mode();
+    printf(CLR_B_WHT "\n  Thank you for using CampusCompute OS Lab Dashboard. Goodbye!\n\n" CLR_RST);
     return 0;
 }
